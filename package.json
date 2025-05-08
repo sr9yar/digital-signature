@@ -1,0 +1,31 @@
+{
+  "name": "@sr9yar/digital-signature",
+  "version": "0.0.1",
+  "description": "Digital Signature Cryptography",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "rimraf dist/ && tsc && cp package.json dist/",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon ./src/main.ts",
+    "watch": "nodemon ./src/main.ts",
+    "start": "nodemon ./src/main.ts"
+  },
+  "author": "Yaroslav",
+  "repository": "https://github.com/sr9yar/digital-signature",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "nodemon": "^3.1.9",
+    "rimraf": "^6.0.1",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}
