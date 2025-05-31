@@ -1,0 +1,88 @@
+
+
+https://www.compart.com/en/unicode/block/U+2200
+
+😱 ≡ ≢  “ ⋮ ”  ∃𝑎
+∈
+
+𝐴∃𝑏∈𝐵(𝑎≠ ¬(∃𝑎∈𝐴∃𝑏∈𝐵(𝑎=𝑏) ≢ 
+
+≠
+
+∃(𝑎,𝑏)∈𝑃:𝑎≠𝑏 
+
+∀(𝑎,𝑏)∈𝑃:𝑎 ≠ 𝑏
+
+𝑥 ≡
+±
+
+±1 ⟺
+
+https://www.compart.com/en/unicode/search?q=superscript#characters
+https://www.compart.com/en/unicode/block/U+2070
+
+
+¹ ² ³ ⁰  ⁻¹
+ₖ
+₁ ₂ ₃ ₀  ₋₁
+⌊ ⌋
+
+
+⋮    --- is divisible by
+∤    --- does not devide
+∈
+→
+←
+±
+≠
+
+×
+
+⁽⁾
+
+₍₎
+
+
+https://www.w3schools.com/charsets/ref_utf_technical.asp
+
+⏐
+
+
+⎰
+⎱ ⎰
+
+⎧
+⎨
+⎩
+
+
+⎛	 	
+⎜  	
+⎝ 
+⎞	 	
+⎟	 	
+⎠
+
+
+α
+β
+γ
+π
+
+Φ φ
+
+
+ℕ
+ℤ
+ℚ
+ℝ
+ℂ
+
+
+
+  superscript_chars = "⁰¹²³⁴⁵⁶⁷⁸⁹"
+  subscript_chars = "₀₁₂₃₄₅₆₇₈₉"
+
+
+https://rupertshepherd.info/resource_pages/superscript-letters-in-unicode
+https://en.wikipedia.org/wiki/Unicode_subscripts_and_superscripts
