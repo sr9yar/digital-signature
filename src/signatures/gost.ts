@@ -2,20 +2,15 @@ import {
   EuclideanAlgorithm,
 } from '../lib/classes/euclidean-algorithm';
 import {
-  binArrayToAscii,
   binToDec,
   decToBin,
   divideModulo,
-  findOrderInGroup,
-  getAllFactors,
   getRandomInArray,
   getRandomNumber,
   isPrime,
   moduloPositive,
   plaintextToBinArray,
-  primeFactors,
   slice,
-  stringToArray,
   sub,
   sup,
 } from '../lib/utility';
@@ -23,13 +18,10 @@ import {
   DigitalSignature,
 } from './digital-signature';
 import {
-  LargePowerModulo,
-} from '../lib/classes/large-power-modulo';
-import {
   // PRIME_NUMBERS,
   PRIME_NUMBERS_10K,
 } from '../lib/constants';
-import { logger } from '../lib/classes';
+import { LargePowerModulo, logger } from '../lib/classes';
 import { Point } from 'src/lib/classes/point';
 
 
@@ -92,6 +84,10 @@ export class Gost extends DigitalSignature {
   // ЭЦП 
   signature: string;
 
+  //  =====================
+
+  hashFunction: Function;
+
   // =====================
 
   // r obtained during verification
@@ -116,22 +112,49 @@ export class Gost extends DigitalSignature {
   R: number = 0;
   // =====================
 
+  // show logs for adding points
+  logAddingPoints: boolean = false;
 
   /**
    * Constructor
    */
-  constructor(p?: number) {
+  constructor(
+    p?: number,
+    a?: number,
+    b?: number,
+    logAddingPoints?: boolean,
+  ) {
     super();
+
+    if (logAddingPoints !== undefined) {
+      this.logAddingPoints = !!logAddingPoints;
+    }
+
     if (typeof p === 'number') {
       this._p = p;
     } else {
       this.generateP();
     }
 
-    this.generateAB();
-    this.generateE();
+    if (typeof a === 'number' && typeof b === 'number') {
+      this.a = a;
+      this.b = b;
+    } else {
+      this.generateAB();
+    }
+
+    // set m
+    this.setM();
+
+    // if (typeof q === 'number') {
+    //   this.q = q;
+    // } else {
     this.generateQ();
-    this.selectP();
+    // }
+    //throw new Error();
+
+    // Выбрать точку P
+    this.selectPoint();
     this.defineHashFunction();
     this.defineD();
     this.defineQ();
@@ -175,11 +198,11 @@ export class Gost extends DigitalSignature {
   /**
    * Set a, b
    */
-  generateAB(a: number = 4, b: number = 1) {
+  generateAB(a?: number, b?: number) {
     this.logger.log(`2. [Определение параметров домена] `, 'color:yellow');
 
-    this.a = a;
-    this.b = b;
+    this.a = a ?? getRandomNumber(101, 599);
+    this.b = b ?? getRandomNumber(101, 599);
 
     this.logger.log(`Generating a,b. a=${this.a}, b=${this.b}.`, 'color:yellow');
 
@@ -193,7 +216,10 @@ export class Gost extends DigitalSignature {
   /**
    * A group of points on an elliptic curve
    */
-  generateE() {
+  setM() {
+    // https://----------.io/n8EhjAf7HfhUtjBx3hj7yA
+    // 07:00
+    //
     this.logger.log(`3. [Определение точек эллиптической кривой] `, 'color:yellow');
 
     this.logger.log(`F${sub(this.p)} =`);
@@ -203,7 +229,7 @@ export class Gost extends DigitalSignature {
 
     this.logger.log(`\nПоиск всех корней\n`);
 
-    const last = (this.p + 1) / 2;
+    const last = Math.floor((this.p - 1) / 2);
 
     const gen = this.getGenerator(0, last);
 
@@ -216,14 +242,23 @@ export class Gost extends DigitalSignature {
       }
 
       const n = next.value ** 2;
+      // const h = moduloPositive(n, this.p);
 
-      const h = moduloPositive(n, this.p);
+      const [y2] = new LargePowerModulo(next.value, 2, this.p).calc();
+
       // const hMod = new LargePowerModulo(next.value, 2, this.p);
       // const result = hMod.calc();
       // //const result = hMod.printResults();
       // this.h = result[0];
-      rootsMap.set(h, next.value);
-      this.logger.log(`(±${next.value})${sup(2)} = ${n} mod ${this.p} = ${h}`);
+      // const val = rootsMap.get(h) ?? [];
+      // val.push(next.value);
+
+      rootsMap.set(y2, next.value);
+      if (next.value === 0) {
+        this.logger.log(`${next.value}${sup(2)} = ${n} mod ${this.p} = ${y2}`);
+      } else {
+        this.logger.log(`(±${next.value})${sup(2)} = ${n} mod ${this.p} = ${y2}`);
+      }
       // this.logger.log(`${h}`);
 
     }
@@ -245,7 +280,11 @@ export class Gost extends DigitalSignature {
       }
       const x = next.value;
 
-      const y2 = x ** 3 + this.a * x + this.b;
+      const [x3] = new LargePowerModulo(x, 3, this.p).calc();
+      const ax = moduloPositive(this.a * x, this.p);
+
+      // const y2 = x ** 3 + this.a * x + this.b;
+      const y2 = x3 + ax + this.b;
 
       const modY2 = moduloPositive(y2, this.p);
 
@@ -253,21 +292,27 @@ export class Gost extends DigitalSignature {
       if (rootsMap.has(modY2)) {
         // this.logger.log(`${modY2}`, 'color:green');
 
+        //
         if (modY2 === 0) {
           // точка только одна
           m += 1;
         } else {
-          // два точки - ±
+          // две точки - ±
           m += 2;
         }
+
         points.push([x, rootsMap.get(modY2)]);
+
+        // const values = rootsMap.get(modY2);
+        // for (let i = 0; i < values.length; i++) {
+        //   points.push([x, values[i]]);
+        // }
       } else {
         color = 'color:gray';
 
       }
 
-
-      this.logger.log(`y${sup(2)} = x${sup(3)} + 4x + 1 = ${x}${sup(3)} + 4 × ${x} + 1 = ${y2} mod ${this.p} = ${modY2}`, color);
+      this.logger.log(`y${sup(2)} = x${sup(3)} + a × x + b = ${x}${sup(3)} + ${this.a} × ${x} + ${this.b} = ${x3} + ${ax} + ${this.b} mod ${this.p} = ${y2} mod ${this.p} = ${modY2}`, color);
 
     }
 
@@ -280,8 +325,11 @@ export class Gost extends DigitalSignature {
       this.logger.log(`(${point[0]}, -${point[1]}), (${point[0]}, ${point[1]})`);
     }
 
+    // todo
     m += 1;
     this.logger.log(`Мощность группы`);
+    // this.logger.log(` Количество точек ${this.E.length}`);
+
     this.logger.log(`⏐ E${sub(this.a + ',' + this.b)} (F${sub(this.p)}) ⏐ = m = ${m}`);
     this.logger.log(`m = ${m}`);
 
@@ -295,19 +343,22 @@ export class Gost extends DigitalSignature {
    * q
    */
   generateQ() {
+    // https://----------.io/n8EhjAf7HfhUtjBx3hj7yA
+    // 20:30
+    // 
     // Просто число q - порядок циклической подгруппы группы точек 
     // эллиптической кривой E, m = nq, n ∈ ℕ
 
     this.logger.log(`4. [Определение q] Просто число q - порядок циклической подгруппы группы точек эллиптической кривой E, m = nq, n ∈ ℕ`, 'color:yellow');
 
-    const factors = primeFactors(this.m);
+    // const factors = primeFactors(this.m);
 
-    this.logger.log(`Простые делители m: ${factors}`);
+    // this.logger.log(`Простые делители m: ${factors}`);
 
-    const q = factors[factors.length - 1];
-    this.logger.log(`q = ${q}`);
+    // const q = factors[factors.length - 1];
+    // this.logger.log(`q = ${q}`);
 
-    this.q = q;
+    this.q = this.E.length;
 
     return;
   }
@@ -317,7 +368,7 @@ export class Gost extends DigitalSignature {
   /**
    * Определить точку P
    */
-  selectP() {
+  selectPoint() {
     //
     // Точка P ≠ 0 эллиптический кривой E, 
     // с координатами (x p, y p), удовлетворяющая равенству qP = 0    
@@ -347,7 +398,7 @@ export class Gost extends DigitalSignature {
       let pPrev = p1;
 
       for (let OP = 2; OP < this.p; OP++) {
-        const pNext = this.addPoints(p1, pPrev, OP);
+        const pNext = this.addPoints(p1, pPrev, OP, this.logAddingPoints);
         this.P.set(OP, pNext);
         pPrev = pNext;
 
@@ -404,24 +455,61 @@ export class Gost extends DigitalSignature {
   }
 
 
+  /**
+   * simple hash
+   * @returns [hash, sum]
+   */
+  simpleHashFunction(blocks: number[] = this.inputBlocks) {
+    const l = this.l;
+    const sum = blocks.reduce((a, c) => a + c, 0);
+    const sumMod = moduloPositive(sum, 2 ** l);
+    return [sumMod, sum];
+  }
+
+
 
   /**
    * Define hash function
+   * https://----------.io/n8EhjAf7HfhUtjBx3hj7yA 53-00
    */
   defineHashFunction() {
-
     this.logger.log(`6. [Задать хеш функцию h()] Сложение блоков длины l по модулю 2${sup('l')} `, 'color:yellow');
     this.logger.log(`l - битовая длина значения q `);
     this.logger.log(` ??? Двоичный логарифм q с окриглением вниз  `);
 
+    this.hashFunction = this.simpleHashFunction;
+
+    /**
+     * Hash function
+     * @param blocks 
+     * @returns 
+     */
+    const func = (blocks: number[] = this.inputBlocks) => {
+
+      // В качестве хэш-функции возьмите сложение блоков сообщения длины  
+      // (в двоичном представлении) по модулю 2l
+
+      this.logger.log(`\n`);
+
+      const log2 = Math.floor(Math.log2(this.q));
+      this.logger.log(`⌊log₂p⌋ = ⌊log₂${this.q}⌋ = ${log2}`);
+
+      const l = log2;
+
+      const sum = blocks.reduce((a, c) => a + c, 0);
+      const hash = moduloPositive(sum, 2 ** l);
+
+      this.logger.log(`hash = ${hash}`);
+      this.logger.log(`\n`);
+
+      return [hash, sum];
+    };
+
+    this.hashFunction = func;
+
     this.logger.log(` `);
-
-    // this.bs = Math.floor(Math.log2(this.p));
-    // this.logger.log(`⌊log₂p⌋ = ⌊log₂${this.p}⌋ = ${this.bs}`);
-    // this.logger.log(`Blocksize is ${this.bs}.`, 'color:cyan');
-    // this.logger.log(`\n`);
-
   }
+
 
 
   /**
@@ -464,30 +552,31 @@ export class Gost extends DigitalSignature {
    * P + P
    * 
    */
-  addPoints(p1: Point, p2: Point, pointNumber?: number): Point {
+  addPoints(p1: Point, p2: Point, pointNumber: number = undefined, showLogs: boolean = true): Point {
 
     const pN = pointNumber ?? 2;
-    this.logger.log(`\n⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤`);
-
-    this.logger.log(`Складываем точки ${p1.toString()} и ${p2.toString()}.`);
+    if (showLogs) this.logger.log(`\n⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤`);
+    if (showLogs) this.logger.log(`Складываем точки ${p1.toString()} и ${p2.toString()}.`);
 
     let p: Point;
 
     if (p1.areMutuallyInverse(p2, this.p)) {
-      this.logger.log(`Точки взаимно обратные. ${pN}P = 0`);
+      if (showLogs) this.logger.log(`Точки взаимно обратные. ${pN}P = 0`);
       p = new Point(0, 0);
     } else {
       if (p1.equals(p2)) {
-        this.logger.log(`${pN}P = P + P = ?`);
-        p = this.calcAsPplusP(p1, p2);
+        if (showLogs) this.logger.log(`${pN}P = P + P = ?`);
+        p = this.calcAsPplusP(p1, p2, showLogs);
       } else {
-        this.logger.log(`P ≠ Q, Q ≠ -P`);
-        p = this.calc3P(p1, p2);
+
+        if (showLogs) this.logger.log(`P ≠ Q, Q ≠ -P`);
+        p = this.calc3P(p1, p2, showLogs);
       }
     }
 
-    this.logger.log(`Точка, получившаяся при сложении: ${pN}P = ${p.toString()}`)
-    this.logger.log(`⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤\n`);
+    if (showLogs) this.logger.log(`Точка, получившаяся при сложении: ${pN}P = ${p.toString()}`);
+    if (showLogs) this.logger.log(`⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤\n`);
+
     return p;
   }
 
@@ -499,58 +588,58 @@ export class Gost extends DigitalSignature {
    * @param p2 
    * @returns 
    */
-  calc3P(p1: Point, p2: Point): Point {
+  calc3P(p1: Point, p2: Point, showLogs: boolean = true): Point {
 
-    this.logger.log(`x${sub(1)} = ${p1.x}, y${sub(1)} = ${p1.y}, x${sub(2)} = ${p2.x}, y${sub(2)} = ${p2.y}`);
-    this.logger.log(`\n`);
+    if (showLogs) this.logger.log(`x${sub(1)} = ${p1.x}, y${sub(1)} = ${p1.y}, x${sub(2)} = ${p2.x}, y${sub(2)} = ${p2.y}`);
+    if (showLogs) this.logger.log(`\n`);
 
     // calculating x3
 
-    this.logger.log(`\t ⎛y${sub(2)} - y${sub(1)}⎞${sup(2)}`);
-    this.logger.log(`x${sub(3)} =\t ⎜⎯⎯⎯⎯⎯⎯⎯⎟ - x${sub(1)} - x${sub(2)}`);
-    this.logger.log(`\t ⎝x${sub(2)} - x${sub(1)}⎠`);
+    if (showLogs) this.logger.log(`\t ⎛y${sub(2)} - y${sub(1)}⎞${sup(2)}`);
+    if (showLogs) this.logger.log(`x${sub(3)} =\t ⎜⎯⎯⎯⎯⎯⎯⎯⎟ - x${sub(1)} - x${sub(2)}`);
+    if (showLogs) this.logger.log(`\t ⎝x${sub(2)} - x${sub(1)}⎠`);
 
-    this.logger.log(`\t ⎛ ${p2.y} - ${p1.y} ⎞${sup(2)}`);
-    this.logger.log(`   =\t ⎜⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎟ - ${p1.x} - ${p2.x}`);
-    this.logger.log(`\t ⎝ ${p2.x} - ${p1.x} ⎠`);
+    if (showLogs) this.logger.log(`\t ⎛ ${p2.y} - ${p1.y} ⎞${sup(2)}`);
+    if (showLogs) this.logger.log(`   =\t ⎜⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎟ - ${p1.x} - ${p2.x}`);
+    if (showLogs) this.logger.log(`\t ⎝ ${p2.x} - ${p1.x} ⎠`);
 
     const y2y1 = p2.y - p1.y;
     const x2x1 = p2.x - p1.x;
     const minusX2x1 = p2.x + p1.x;
 
-    this.logger.log(`\t ⎛ ${y2y1} ⎞${sup(2)}`);
-    this.logger.log(`   =\t ⎜⎯⎯⎯⎯⎯⎟ - ${minusX2x1}`);
-    this.logger.log(`\t ⎝ ${x2x1} ⎠`);
+    if (showLogs) this.logger.log(`\t ⎛ ${y2y1} ⎞${sup(2)}`);
+    if (showLogs) this.logger.log(`   =\t ⎜⎯⎯⎯⎯⎯⎟ - ${minusX2x1}`);
+    if (showLogs) this.logger.log(`\t ⎝ ${x2x1} ⎠`);
 
     const y2y12 = y2y1 ** 2;
     const x2x12 = x2x1 ** 2;
 
-    this.logger.log(`\t  ${y2y12} mod ${this.p} `);
-    this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ - ${minusX2x1}`);
-    this.logger.log(`\t  ${x2x12} mod ${this.p} `);
+    if (showLogs) this.logger.log(`\t  ${y2y12} mod ${this.p} `);
+    if (showLogs) this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ - ${minusX2x1}`);
+    if (showLogs) this.logger.log(`\t  ${x2x12} mod ${this.p} `);
 
     const y2y12mod = moduloPositive(y2y12, this.p);
     const x2x12mod = moduloPositive(x2x12, this.p);
 
-    this.logger.log(`\t  ${y2y12mod} `);
-    this.logger.log(`   =\t ⎯⎯⎯⎯⎯ - ${minusX2x1}`);
-    this.logger.log(`\t  ${x2x12mod} `);
+    if (showLogs) this.logger.log(`\t  ${y2y12mod} `);
+    if (showLogs) this.logger.log(`   =\t ⎯⎯⎯⎯⎯ - ${minusX2x1}`);
+    if (showLogs) this.logger.log(`\t  ${x2x12mod} `);
 
-    this.logger.log(`\t  ${y2y12mod} - ${x2x12mod} * ${minusX2x1}`);
-    this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ `);
-    this.logger.log(`\t        ${x2x12mod} `);
+    if (showLogs) this.logger.log(`\t  ${y2y12mod} - ${x2x12mod} * ${minusX2x1}`);
+    if (showLogs) this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ `);
+    if (showLogs) this.logger.log(`\t        ${x2x12mod} `);
 
     const toCommonDivisor = x2x12mod * minusX2x1;
 
-    this.logger.log(`\t  (${y2y12mod} - ${toCommonDivisor}) mod ${this.p}`);
-    this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ `);
-    this.logger.log(`\t     ${x2x12mod} `);
+    if (showLogs) this.logger.log(`\t  (${y2y12mod} - ${toCommonDivisor}) mod ${this.p}`);
+    if (showLogs) this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ `);
+    if (showLogs) this.logger.log(`\t     ${x2x12mod} `);
 
     const dividend = moduloPositive(y2y12mod - toCommonDivisor, this.p);
 
-    this.logger.log(`\t     ${dividend}`);
-    this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ `);
-    this.logger.log(`\t     ${x2x12mod} `);
+    if (showLogs) this.logger.log(`\t     ${dividend}`);
+    if (showLogs) this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ `);
+    if (showLogs) this.logger.log(`\t     ${x2x12mod} `);
 
 
     const [resultX, e] = divideModulo(dividend, x2x12mod, this.p);
@@ -578,56 +667,56 @@ export class Gost extends DigitalSignature {
     // }
 
     if (e > 1) {
-      this.logger.log(`\t     ${dividend} + ${this.p} × ${e}`);
-      this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ `);
-      this.logger.log(`\t     ${x2x12mod} `);
+      if (showLogs) this.logger.log(`\t     ${dividend} + ${this.p} × ${e}`);
+      if (showLogs) this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ `);
+      if (showLogs) this.logger.log(`\t     ${x2x12mod} `);
 
       const d = dividend + this.p ** e;
-      this.logger.log(`\t     ${d}`);
-      this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ `);
-      this.logger.log(`\t     ${x2x12mod} `);
+      if (showLogs) this.logger.log(`\t     ${d}`);
+      if (showLogs) this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ `);
+      if (showLogs) this.logger.log(`\t     ${x2x12mod} `);
     }
 
-    this.logger.log(`   =\t ${x3}`);
-    this.logger.log(` `);
-    this.logger.log(`x${sub(3)} = ${x3}`, 'color:cyan');
-    this.logger.log(` `);
+    if (showLogs) this.logger.log(`   =\t ${x3}`);
+    if (showLogs) this.logger.log(` `);
+    if (showLogs) this.logger.log(`x${sub(3)} = ${x3}`, 'color:cyan');
+    if (showLogs) this.logger.log(` `);
 
 
 
     // calculating y3
 
-    this.logger.log(`\t y${sub(2)} - y${sub(1)}`);
-    this.logger.log(`y${sub(3)} =\t ⎯⎯⎯⎯⎯⎯⎯ × (x${sub(1)} - x${sub(3)}) - y${sub(1)}`);
-    this.logger.log(`\t x${sub(2)} - x${sub(1)}`);
+    if (showLogs) this.logger.log(`\t y${sub(2)} - y${sub(1)}`);
+    if (showLogs) this.logger.log(`y${sub(3)} =\t ⎯⎯⎯⎯⎯⎯⎯ × (x${sub(1)} - x${sub(3)}) - y${sub(1)}`);
+    if (showLogs) this.logger.log(`\t x${sub(2)} - x${sub(1)}`);
 
-    this.logger.log(`\t ${p2.y} - ${p1.y}`);
-    this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯ × (${p1.x} - ${x3}) - ${p1.y}`);
-    this.logger.log(`\t ${p2.x} - ${p1.x}`);
+    if (showLogs) this.logger.log(`\t ${p2.y} - ${p1.y}`);
+    if (showLogs) this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯ × (${p1.x} - ${x3}) - ${p1.y}`);
+    if (showLogs) this.logger.log(`\t ${p2.x} - ${p1.x}`);
 
     const y2MinusY1 = p2.y - p1.y;
     const x2MinusX1 = p2.x - p1.x;
     const x1MinusX3 = p1.x - x3;
 
-    this.logger.log(`\t ${y2MinusY1}`);
-    this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯ × ${x1MinusX3} - ${p1.y}`);
-    this.logger.log(`\t ${x2MinusX1}`);
+    if (showLogs) this.logger.log(`\t ${y2MinusY1}`);
+    if (showLogs) this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯ × ${x1MinusX3} - ${p1.y}`);
+    if (showLogs) this.logger.log(`\t ${x2MinusX1}`);
 
-    this.logger.log(`\t ${y2MinusY1} × ${x1MinusX3}`);
-    this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯  - ${p1.y}`);
-    this.logger.log(`\t ${x2MinusX1}`);
+    if (showLogs) this.logger.log(`\t ${y2MinusY1} × ${x1MinusX3}`);
+    if (showLogs) this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯  - ${p1.y}`);
+    if (showLogs) this.logger.log(`\t ${x2MinusX1}`);
 
     const dividendNew = y2MinusY1 * x1MinusX3;
 
-    this.logger.log(`\t ${dividendNew} mod ${this.p}`);
-    this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯  - ${p1.y}`);
-    this.logger.log(`\t ${x2MinusX1}`);
+    if (showLogs) this.logger.log(`\t ${dividendNew} mod ${this.p}`);
+    if (showLogs) this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯  - ${p1.y}`);
+    if (showLogs) this.logger.log(`\t ${x2MinusX1}`);
 
     const dividendNewMod = moduloPositive(dividendNew, this.p);
 
-    this.logger.log(`\t ${dividendNewMod}`);
-    this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯  - ${p1.y}`);
-    this.logger.log(`\t ${x2MinusX1}`);
+    if (showLogs) this.logger.log(`\t ${dividendNewMod}`);
+    if (showLogs) this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯  - ${p1.y}`);
+    if (showLogs) this.logger.log(`\t ${x2MinusX1}`);
 
 
     const [resultY, eY] = divideModulo(dividendNewMod, x2MinusX1, this.p);
@@ -656,25 +745,25 @@ export class Gost extends DigitalSignature {
 
 
     if (eY > 1) {
-      this.logger.log(`\t     ${dividendNewMod} + ${this.p} × ${eY}`);
-      this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ - ${p1.y}`);
-      this.logger.log(`\t     ${x2MinusX1} `);
+      if (showLogs) this.logger.log(`\t     ${dividendNewMod} + ${this.p} × ${eY}`);
+      if (showLogs) this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ - ${p1.y}`);
+      if (showLogs) this.logger.log(`\t     ${x2MinusX1} `);
 
       if (eY < 10) {
         const d = dividend + this.p ** eY;
-        this.logger.log(`\t     ${d}`);
-        this.logger.log(`   =\ ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ - ${p1.y}`);
-        this.logger.log(`\t     ${x2MinusX1} `);
+        if (showLogs) this.logger.log(`\t     ${d}`);
+        if (showLogs) this.logger.log(`   =\ ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ - ${p1.y}`);
+        if (showLogs) this.logger.log(`\t     ${x2MinusX1} `);
       }
     }
 
-    this.logger.log(`   =\t ${y3} - ${p1.y}`);
+    if (showLogs) this.logger.log(`   =\t ${y3} - ${p1.y}`);
     y3 -= p1.y;
-    this.logger.log(`   =\t ${y3}`);
+    if (showLogs) this.logger.log(`   =\t ${y3}`);
 
-    this.logger.log(` `);
-    this.logger.log(`y${sub(3)} = ${y3}`, 'color:cyan');
-    this.logger.log(` `);
+    if (showLogs) this.logger.log(` `);
+    if (showLogs) this.logger.log(`y${sub(3)} = ${y3}`, 'color:cyan');
+    if (showLogs) this.logger.log(` `);
 
 
 
@@ -689,42 +778,42 @@ export class Gost extends DigitalSignature {
    * @param p2 
    * @returns 
    */
-  calcAsPplusP(p1: Point, p2: Point): Point {
+  calcAsPplusP(p1: Point, p2: Point, showLogs: boolean = true): Point {
 
-    this.logger.log(`x${sub(1)} = ${p1.x}, y${sub(1)} = ${p1.y}, x${sub(2)} = ${p2.x}, y${sub(2)} = ${p2.y}`);
-    this.logger.log(`\n`);
+    if (showLogs) this.logger.log(`x${sub(1)} = ${p1.x}, y${sub(1)} = ${p1.y}, x${sub(2)} = ${p2.x}, y${sub(2)} = ${p2.y}`);
+    if (showLogs) this.logger.log(`\n`);
 
     // calculating x3
 
-    this.logger.log(`\t ⎛3 × x${sub(1)}${sup(2)} + a⎞${sup(2)}`);
-    this.logger.log(`x${sub(3)} =\t ⎜⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎟ - 2 × x${sub(1)}`);
-    this.logger.log(`\t ⎝   2 × y${sub(1)}  ⎠`);
+    if (showLogs) this.logger.log(`\t ⎛3 × x${sub(1)}${sup(2)} + a⎞${sup(2)}`);
+    if (showLogs) this.logger.log(`x${sub(3)} =\t ⎜⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎟ - 2 × x${sub(1)}`);
+    if (showLogs) this.logger.log(`\t ⎝   2 × y${sub(1)}  ⎠`);
 
-    this.logger.log(`\t ⎛3 × ${p1.x}${sup(2)} + ${this.a} ⎞${sup(2)}`);
-    this.logger.log(`   =\t ⎜⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎟ - 2 × ${p1.x}`);
-    this.logger.log(`\t ⎝   2 × ${p1.y}   ⎠`);
+    if (showLogs) this.logger.log(`\t ⎛3 × ${p1.x}${sup(2)} + ${this.a} ⎞${sup(2)}`);
+    if (showLogs) this.logger.log(`   =\t ⎜⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎟ - 2 × ${p1.x}`);
+    if (showLogs) this.logger.log(`\t ⎝   2 × ${p1.y}   ⎠`);
 
     const mult2x = 2 * p1.x;
     let numerator = 3 * p1.x ** 2 + this.a;
     let denominator = 2 * p1.y;
 
-    this.logger.log(`\t ⎛ ${numerator} ⎞${sup(2)}`);
-    this.logger.log(`   =\t ⎜⎯⎯⎯⎯⎟ - ${mult2x}`);
-    this.logger.log(`\t ⎝ ${denominator} ⎠`);
+    if (showLogs) this.logger.log(`\t ⎛ ${numerator} ⎞${sup(2)}`);
+    if (showLogs) this.logger.log(`   =\t ⎜⎯⎯⎯⎯⎟ - ${mult2x}`);
+    if (showLogs) this.logger.log(`\t ⎝ ${denominator} ⎠`);
 
     numerator **= 2;
     denominator **= 2;
 
-    this.logger.log(`\t ⎛ ${numerator} ⎞`);
-    this.logger.log(`   =\t ⎜⎯⎯⎯⎯⎯⎯⎟ - ${mult2x}`);
-    this.logger.log(`\t ⎝ ${denominator}  ⎠`);
+    if (showLogs) this.logger.log(`\t ⎛ ${numerator} ⎞`);
+    if (showLogs) this.logger.log(`   =\t ⎜⎯⎯⎯⎯⎯⎯⎟ - ${mult2x}`);
+    if (showLogs) this.logger.log(`\t ⎝ ${denominator}  ⎠`);
 
     numerator = moduloPositive(numerator, this.p);
     denominator = moduloPositive(denominator, this.p);
 
-    this.logger.log(`\t ⎛ ${numerator}  ⎞`);
-    this.logger.log(`   =\t ⎜⎯⎯⎯⎯⎯⎟ - ${mult2x}`);
-    this.logger.log(`\t ⎝ ${denominator}  ⎠`);
+    if (showLogs) this.logger.log(`\t ⎛ ${numerator}  ⎞`);
+    if (showLogs) this.logger.log(`   =\t ⎜⎯⎯⎯⎯⎯⎟ - ${mult2x}`);
+    if (showLogs) this.logger.log(`\t ⎝ ${denominator}  ⎠`);
 
     // 29-30
     // https://---------.io/n8EhjAf7HfhUtjBx3hj7yA
@@ -732,77 +821,77 @@ export class Gost extends DigitalSignature {
 
     if (numerator / denominator !== Math.ceil(numerator / denominator)) {
       const counter = this.findDivisor(numerator, denominator);
-      this.logger.log(`\t ⎛ ${numerator} + ${this.p} × ${counter}  ⎞`);
-      this.logger.log(`   =\t ⎜⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎟ - ${mult2x}`);
-      this.logger.log(`\t ⎝       ${denominator}      ⎠`);
+      if (showLogs) this.logger.log(`\t ⎛ ${numerator} + ${this.p} × ${counter}  ⎞`);
+      if (showLogs) this.logger.log(`   =\t ⎜⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎟ - ${mult2x}`);
+      if (showLogs) this.logger.log(`\t ⎝       ${denominator}      ⎠`);
 
       numerator += this.p * counter;
     }
 
-    this.logger.log(`\t ⎛ ${numerator}  ⎞`);
-    this.logger.log(`   =\t ⎜⎯⎯⎯⎯⎯⎯⎟ - ${mult2x}`);
-    this.logger.log(`\t ⎝  ${denominator}  ⎠`);
+    if (showLogs) this.logger.log(`\t ⎛ ${numerator}  ⎞`);
+    if (showLogs) this.logger.log(`   =\t ⎜⎯⎯⎯⎯⎯⎯⎟ - ${mult2x}`);
+    if (showLogs) this.logger.log(`\t ⎝  ${denominator}  ⎠`);
 
-    this.logger.log(`   =\t ${numerator / denominator} - ${mult2x}`);
+    if (showLogs) this.logger.log(`   =\t ${numerator / denominator} - ${mult2x}`);
 
     const x3result = numerator / denominator - mult2x;
     const x3 = moduloPositive(x3result, this.p);
 
-    this.logger.log(`   =\t ${x3result} mod ${this.p}`);
-    this.logger.log(`   =\t ${x3}`);
+    if (showLogs) this.logger.log(`   =\t ${x3result} mod ${this.p}`);
+    if (showLogs) this.logger.log(`   =\t ${x3}`);
 
-    this.logger.log(`\n`);
+    if (showLogs) this.logger.log(`\n`);
 
     // calculating y
 
-    this.logger.log(`\t 3 × x${sub(1)}${sup(2)} + a`);
-    this.logger.log(`y${sub(3)} =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ × ( x${sub(1)} -  x${sub(3)}) - y${sub(1)}`);
-    this.logger.log(`\t    2 × y${sub(1)}  `);
+    if (showLogs) this.logger.log(`\t 3 × x${sub(1)}${sup(2)} + a`);
+    if (showLogs) this.logger.log(`y${sub(3)} =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ × ( x${sub(1)} -  x${sub(3)}) - y${sub(1)}`);
+    if (showLogs) this.logger.log(`\t    2 × y${sub(1)}  `);
 
-    this.logger.log(`\t  3 × ${p1.x}${sup(2)} + ${this.a}`);
-    this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ × (${p1.x} -  ${x3}) - ${p1.y}`);
-    this.logger.log(`\t    2 × ${p1.y}   `);
+    if (showLogs) this.logger.log(`\t  3 × ${p1.x}${sup(2)} + ${this.a}`);
+    if (showLogs) this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ × (${p1.x} -  ${x3}) - ${p1.y}`);
+    if (showLogs) this.logger.log(`\t    2 × ${p1.y}   `);
 
     let numeratorY = 3 * p1.x ** 2 + this.a;
     let denominatorY = 2 * p1.y;
     const x1x3 = p1.x - x3;
 
-    this.logger.log(`\t    ${numeratorY}`);
-    this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ × (${x1x3}) - ${p1.y}`);
-    this.logger.log(`\t    ${denominatorY}   `);
+    if (showLogs) this.logger.log(`\t    ${numeratorY}`);
+    if (showLogs) this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ × (${x1x3}) - ${p1.y}`);
+    if (showLogs) this.logger.log(`\t    ${denominatorY}   `);
 
     numeratorY *= x1x3;
 
-    this.logger.log(`\t    ${numeratorY}`);
-    this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ - ${p1.y}`);
-    this.logger.log(`\t    ${denominatorY}   `);
+    if (showLogs) this.logger.log(`\t    ${numeratorY}`);
+    if (showLogs) this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ - ${p1.y}`);
+    if (showLogs) this.logger.log(`\t    ${denominatorY}   `);
 
     numeratorY = moduloPositive(numeratorY, this.p);
 
-    this.logger.log(`\t    ${numeratorY}`);
-    this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ - ${p1.y}`);
-    this.logger.log(`\t    ${denominatorY}   `);
+    if (showLogs) this.logger.log(`\t    ${numeratorY}`);
+    if (showLogs) this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ - ${p1.y}`);
+    if (showLogs) this.logger.log(`\t    ${denominatorY}   `);
 
     if (numeratorY / denominatorY !== Math.ceil(numeratorY / denominatorY)) {
       const counter = this.findDivisor(numeratorY, denominatorY);
-      this.logger.log(`\t  ${numeratorY} + ${this.p} × ${counter}  `);
-      this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ - ${p1.y}`);
-      this.logger.log(`\t        ${denominatorY}      `);
+      if (showLogs) this.logger.log(`\t  ${numeratorY} + ${this.p} × ${counter}  `);
+      if (showLogs) this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ - ${p1.y}`);
+      if (showLogs) this.logger.log(`\t        ${denominatorY}      `);
 
       numeratorY += this.p * counter;
     }
 
 
-    this.logger.log(`\t    ${numeratorY}`);
-    this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ - ${p1.y}`);
-    this.logger.log(`\t    ${denominatorY}   `);
+    if (showLogs) this.logger.log(`\t    ${numeratorY}`);
+    if (showLogs) this.logger.log(`   =\t ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ - ${p1.y}`);
+    if (showLogs) this.logger.log(`\t    ${denominatorY}   `);
 
-    this.logger.log(`   =\t ${numeratorY / denominatorY} - ${p1.y}`);
+    if (showLogs) this.logger.log(`   =\t ${numeratorY / denominatorY} - ${p1.y}`);
 
     const y3 = numeratorY / denominatorY - p1.y;
 
-    this.logger.log(`   =\t ${y3}`);
-    this.logger.log(`\n`);
+    if (showLogs) this.logger.log(`   =\t ${y3}`);
+    if (showLogs) this.logger.log(`\n`);
 
 
     const p = new Point(x3, y3);
@@ -862,7 +951,7 @@ export class Gost extends DigitalSignature {
 
     const M = message ?? this.M;
 
-    const blocks = this.messageToBinMap(M);
+    this.messageToBinMap(M);
 
     this.setA();
 
@@ -880,9 +969,9 @@ export class Gost extends DigitalSignature {
     }
 
     // step 6
-    this.calcZ();
+    const signature = this.calcZ();
 
-    return '';
+    return signature;
   }
 
 
@@ -918,17 +1007,6 @@ export class Gost extends DigitalSignature {
   }
 
   /**
-   * simple hash
-   * @returns [hash, sum]
-   */
-  simpleHash() {
-    const sum = this.inputBlocks.reduce((a, c) => a + c, 0);
-    const sumMod = moduloPositive(sum, 2 ** this.l);
-
-    return [sumMod, sum];
-  }
-
-  /**
    * Split message into bin and convert to dec
    * 
    */
@@ -938,7 +1016,7 @@ export class Gost extends DigitalSignature {
     // const sum = this.inputBlocks.reduce((a, c) => a + c, 0);
     // const sumMod = moduloPositive(sum, 2 ** this.l);
 
-    const [sumMod, sum] = this.simpleHash();
+    const [sumMod, sum] = this.hashFunction();
 
     this.signatureA = sumMod;
     this.logger.log(`${this.inputBlocks.join(' + ')} = ${sum} mod 2${sup('l')} = ${sum} mod 2${sup(this.l)} = ${sumMod}`);
@@ -965,7 +1043,7 @@ export class Gost extends DigitalSignature {
    */
   setK() {
     this.logger.log(`Шаг 3. Сгенерировать случайное целое число k, удовлетворяющее неравенству 0 < k < q`, 'color:yellow');
-    this.logger.log(`Раскомментировать`, 'color:red');
+    // this.logger.log(`Раскомментировать`, 'color:red');
     this.k = getRandomNumber(1, this.q - 1);
     // this.k = 3;
     this.logger.log(`k = ${this.k}`);
@@ -978,6 +1056,11 @@ export class Gost extends DigitalSignature {
 
     this.logger.log(`Шаг 4. Вычислить точку эллиптической кривой C = kP и определить r = xC (mod q). Если r = 0, то вернуться к шагу 3.`, `color:yellow`);
     const C = this.P.get(this.k);
+
+    if (!C) {
+      this.logger.error(`Точки ${this.k}P нет в списке расчитанных точек.`);
+    }
+
     this.logger.log(`C = kP = ${this.k}P = ${C}`);
 
     const r = moduloPositive(C.x, this.q);
@@ -1040,6 +1123,8 @@ export class Gost extends DigitalSignature {
     this.logger.log(`ЭЦП: ${signature}`, 'color:green');
 
     this.signature = signature;
+
+    return signature;
   }
 
 
@@ -1130,14 +1215,11 @@ export class Gost extends DigitalSignature {
   step2() {
     this.logger.log(`Шаг 2. Вычислить хеш - код сообения М : h = h (М)`, 'color:yellow');
 
-    const [hash] = this.simpleHash();
+    const [hash] = this.hashFunction();
     const hashBin = decToBin(hash);
     this.vHash = hashBin;
 
     this.logger.log(`h = h(M) = ${hashBin} `);
-
-    this.logger.log(`Хеш тот же `, 'color:red');
-    this.logger.log(`! Добавить хеш функцию `, 'color:red');
 
     return;
   }
@@ -1249,6 +1331,8 @@ export class Gost extends DigitalSignature {
    */
   step7() {
     this.logger.log(`Шаг 7. Если выполнено равенство R = r, то подпись принимается, в противном случае, подпись неверна`, 'color:yellow');
+    this.logger.log(`Использованные параметры: p=${this.p}, m=${this.m}, a=${this.a}, b=${this.b}, q=${this.q}`, 'color:magenta');
+    this.logger.log(` ${this.E.length} ${this.E.length * 2} `, 'color:magenta');
 
     if (this.vR !== this.R) {
       throw new Error(`Подпись неверна`);

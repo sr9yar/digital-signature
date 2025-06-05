@@ -48,9 +48,13 @@ export class LargePowerModulo {
    * @param n number
    * @param a power 
    * @param p modulo
-   * @returns 
+   * @returns [r - result]
    */
   calc(n?: number, a?: number, p?: number): [number, number[], number[], number[]] {
+
+    if (n === 0) {
+      return [0, [], [], []];
+    }
 
     n = n ?? this.n;
     a = a ?? this.a;
