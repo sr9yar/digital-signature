@@ -22,7 +22,7 @@ import {
   PRIME_NUMBERS_10K,
 } from '../lib/constants';
 import { LargePowerModulo, logger } from '../lib/classes';
-import { Point } from 'src/lib/classes/point';
+import { Point } from '../lib/classes/point';
 
 
 
@@ -115,6 +115,9 @@ export class Gost extends DigitalSignature {
   // show logs for adding points
   logAddingPoints: boolean = false;
 
+  // Verification result 
+  signatureVerified: boolean = null;
+
   /**
    * Constructor
    */
@@ -129,6 +132,17 @@ export class Gost extends DigitalSignature {
     if (logAddingPoints !== undefined) {
       this.logAddingPoints = !!logAddingPoints;
     }
+    this.setDomainParameters(p, a, b);
+  }
+
+  /**
+   * Set domain params
+   */
+  setDomainParameters(
+    p?: number,
+    a?: number,
+    b?: number,
+  ) {
 
     if (typeof p === 'number') {
       this._p = p;
@@ -146,12 +160,8 @@ export class Gost extends DigitalSignature {
     // set m
     this.setM();
 
-    // if (typeof q === 'number') {
-    //   this.q = q;
-    // } else {
+    // q
     this.generateQ();
-    // }
-    //throw new Error();
 
     // Выбрать точку P
     this.selectPoint();
@@ -159,6 +169,7 @@ export class Gost extends DigitalSignature {
     this.defineD();
     this.defineQ();
   }
+
 
   /**
    * p setter
@@ -946,6 +957,9 @@ export class Gost extends DigitalSignature {
    * Sign the message
    */
   sign(message?: string): string {
+    // reset previous signature verification
+    this.signatureVerified = null;
+
     this.logger.log(`Формирование цифровой подписи`, 'color:yellow');
     this.logger.log(`\n`);
 
@@ -1163,6 +1177,7 @@ export class Gost extends DigitalSignature {
       this.logger.log(`Проверка подписи: подпись неверна.`, 'color:red');
       this.logger.log(`================================`, 'color:red');
 
+      this.signatureVerified = false;
       return false;
     }
 
@@ -1171,7 +1186,7 @@ export class Gost extends DigitalSignature {
     this.logger.log(`================================`, 'color:blue');
 
     // this.logger.log(`${this.k}`, 'color:blue');
-
+    this.signatureVerified = true;
     return true;
   }
 
@@ -1339,6 +1354,14 @@ export class Gost extends DigitalSignature {
     }
 
     return;
+  }
+
+
+  /**
+   * Clear logs 
+   */
+  clearLogs(): void {
+    this.logger?.clearLogs();
   }
 
   // ====================================================================================
