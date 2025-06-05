@@ -1162,6 +1162,7 @@ export class Gost extends DigitalSignature {
     if (signature) {
       this.signature = signature;
     }
+    this.logger.log(`Подпись: ${this.signature}`, 'color:cyan');
 
     try {
       this.step1();
@@ -1347,7 +1348,7 @@ export class Gost extends DigitalSignature {
   step7() {
     this.logger.log(`Шаг 7. Если выполнено равенство R = r, то подпись принимается, в противном случае, подпись неверна`, 'color:yellow');
     this.logger.log(`Использованные параметры: p=${this.p}, m=${this.m}, a=${this.a}, b=${this.b}, q=${this.q}`, 'color:magenta');
-    this.logger.log(` ${this.E.length} ${this.E.length * 2} `, 'color:magenta');
+    // this.logger.log(` ${this.E.length} ${this.E.length * 2} `, 'color:magenta');
 
     if (this.vR !== this.R) {
       throw new Error(`Подпись неверна`);
