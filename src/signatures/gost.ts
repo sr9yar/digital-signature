@@ -997,6 +997,9 @@ export class Gost extends DigitalSignature {
   messageToBinMap(M: string): number[] {
 
     this.logger.log('Шаг 1. Конвертируем сообщение М в двоичное представление', 'color:yellow')
+
+    this.logger.log(`Сообщение: ${this.M}`);
+
     const plaintextBin = plaintextToBinArray(M).flat().join('');
 
     this.logger.log(`Полная двоичная последовательность: ${plaintextBin}`);

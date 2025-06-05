@@ -1,6 +1,6 @@
 {
   "name": "@sr9yar/digital-signature",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Digital Signature Cryptography",
   "type": "module",
   "main": "dist/index.js",
