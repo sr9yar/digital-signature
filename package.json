@@ -1,6 +1,6 @@
 {
   "name": "@sr9yar/digital-signature",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Digital Signature Cryptography",
   "type": "module",
   "main": "dist/index.js",
@@ -17,6 +17,9 @@
     "dev": "nodemon ./src/main.ts",
     "watch": "nodemon ./src/main.ts",
     "start": "nodemon ./src/main.ts"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "author": "Yaroslav",
   "repository": "https://github.com/sr9yar/digital-signature",

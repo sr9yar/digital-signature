@@ -21,3 +21,15 @@ npm i --save @sr9yar/digital-signature
 ## GOST 34.10-2012
 
 
+
+
+## Publish
+
+```bash
+
+
+npm publish --access=public
+
+
+```
+
