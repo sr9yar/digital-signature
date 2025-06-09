@@ -760,6 +760,11 @@ export function isInt(n: number) {
  */
 export function divideModulo(dividend: number, divisor: number, p: number) {
 
+  if (divisor === 0) {
+    logger.log(`ERROR division by 0 in divideModulo`, 'color:red');
+    return [0, 0];
+  }
+
   // multiplicaßtor
   let m = 0;
 
@@ -794,3 +799,65 @@ export function divideModulo(dividend: number, divisor: number, p: number) {
 
   return [divisionResult, m];
 }
+
+/**
+ * Russian peasant multiplication
+ * 
+ * multiplication of two big number modulo
+ * @param a big number 1
+ * @param b big number 2
+ * @param n modulo
+ * @returns 
+ */
+
+export function multiplyMod(a: number | bigint, b: number | bigint, n: number) {
+  a = BigInt(a) % BigInt(n);
+  b = BigInt(b) % BigInt(n);
+  let res = 0n;
+  a = a < 0n ? a + BigInt(n) : a;
+  b = b < 0n ? b + BigInt(n) : b;
+
+  while (b > 0n) {
+    if (b % 2n === 1n) {
+      res = (res + a) % BigInt(n);
+    }
+    a = (a * 2n) % BigInt(n);
+    b = b / 2n;
+  }
+  return Number(res);
+}
+
+
+/**
+ * Get all summonds of a number
+ * @param target 
+ * @returns 
+ */
+export function getAllSummands(target: number): number[] {
+  let summands: number[] = [1]; // Start with 1
+  let sum = 1;
+
+  // Double until exceeding the target
+  while (sum * 2 <= target) {
+    summands.push(sum);
+    sum *= 2;
+  }
+
+  // Now add remaining terms (binary decomposition)
+  let remaining = target - sum;
+  let tempSummands = [...summands].reverse();
+
+  for (const num of tempSummands) {
+    if (num <= remaining) {
+      summands.push(num);
+      remaining -= num;
+    }
+  }
+
+  if (remaining > 0) {
+    summands.push(remaining);
+  }
+
+  return summands;
+}
+

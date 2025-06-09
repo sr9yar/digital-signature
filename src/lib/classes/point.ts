@@ -5,17 +5,26 @@ import { logger } from "./logger";
 
 export class Point {
 
+  scalar?: number;
   logger = logger;
   x: number = 0;
   y: number = 0;
 
-  constructor(x: number, y: number) {
+  constructor(x: number, y: number, scalar?: number) {
     this.x = x;
     this.y = y;
+    if (typeof scalar === 'number') {
+      this.scalar = scalar;
+    }
   }
 
+  /**
+   * to string
+   * @returns 
+   */
   toString() {
-    const str = `(${this.x}, ${this.y})`
+    // const str = `${this.name} (${this.x}, ${this.y})`;
+    const str = `(${this.x}, ${this.y})`;
     // this.logger.log(str);
     return str;
   }
@@ -50,7 +59,7 @@ export class Point {
   }
 
   /**
-   * checks if two poits in an elliptic curve are
+   * Сhecks if two points in an elliptic curve are
    * mutullay inverse (their addition results 
    * in the identity element - the point at infinity)
    * @param point2 
@@ -65,15 +74,37 @@ export class Point {
       return true;
     }
     return false;
-
   }
 
   /**
-   * is zero
+   * 
+   */
+  clone(): Point {
+    const x = this.x;
+    const y = this.y;
+    const s = this.scalar;
+
+    console.log(x, y, s);
+    return new Point(x, y, s);
+  }
+
+  /**
+   * Is zero
    */
   get is0(): boolean {
     return this.x === 0 && this.y === 0;
   }
+
+  /**
+   * Point notation 2P
+   */
+  get name(): string {
+    if (this.scalar) {
+      return `${this.scalar}P`;
+    }
+    return '';
+  }
+
 }
 
 
