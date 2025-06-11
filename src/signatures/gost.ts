@@ -61,7 +61,7 @@ export class Gost extends DigitalSignature {
   // Точки
   E: Point[] = [];
 
-  //
+  // Подгруппа
   P: Map<number, Point> = new Map();
 
   // Ключ подписи - целое число d
@@ -175,10 +175,10 @@ export class Gost extends DigitalSignature {
     this.generateQ();
 
     // Выбрать точку P
-    this.selectPoint();
+    this.selectPoint(false);
     this.defineHashFunction();
-    this.defineD();
-    this.defineQ();
+    this.defineD(320);
+    this.defineQ(false);
   }
 
 
@@ -286,8 +286,6 @@ export class Gost extends DigitalSignature {
 
       rootsMap.set(y2, next.value);
 
-
-
       if (next.value === 0) {
         if (this.logLongLists || (sliceStart < next.value && next.value < sliceEnd)) this.logger.log(`${next.value}${sup(2)} = ${n} mod ${this.p} = ${y2}`);
       } else {
@@ -328,6 +326,7 @@ export class Gost extends DigitalSignature {
       const modY2 = moduloPositive(y2, this.p);
 
       let color: string;
+      let suffix: string = ``;
       if (rootsMap.has(modY2)) {
         // this.logger.log(`${modY2}`, 'color:green');
 
@@ -346,15 +345,19 @@ export class Gost extends DigitalSignature {
         // for (let i = 0; i < values.length; i++) {
         //   points.push([x, values[i]]);
         // }
+
+        const r = rootsMap.get(modY2);
+        suffix = r ? `[${r}]` : ``;
       } else {
         color = 'color:gray';
+
       }
 
-      if (this.logLongLists || next.value <= -last + 20) this.logger.log(`y${sup(2)} = x${sup(3)} + a × x + b = ${x}${sup(3)} + ${this.a} × ${x} + ${this.b} = ${x3} + ${ax} + ${this.b} mod ${this.p} = ${y2} mod ${this.p} = ${modY2}`, color);
+      if (this.logLongLists || next.value <= -last + 20) this.logger.log(`y${sup(2)} = x${sup(3)} + a × x + b = ${x}${sup(3)} + ${this.a} × ${x} + ${this.b} = ${x3} + ${ax} + ${this.b} mod ${this.p} = ${y2} mod ${this.p} = ${modY2} ${suffix}`, color);
     }
     if (!this.logLongLists) this.logger.log(` ... \n`);
 
-    this.E = points.map((p, i) => new Point(p[0], p[1], i));
+    this.E = points.map((p, i) => new Point(p[0], p[1], i + 1));
 
     this.logger.log(``);
     this.logger.log(`Точки: `);
@@ -426,7 +429,10 @@ export class Gost extends DigitalSignature {
   /**
    * Определить точку P
    */
-  selectPoint() {
+  selectPoint(showLogs: boolean = false) {
+
+    showLogs ??= this.logAddingPoints;
+
     //
     // Точка P ≠ 0 эллиптический кривой E, 
     // с координатами (x p, y p), удовлетворяющая равенству qP = 0    
@@ -467,17 +473,18 @@ export class Gost extends DigitalSignature {
 
       const p1 = this.E[eN];
 
-      this.logger.log(`Проверяем точку: ${p1} [${eN}]`, 'color:green');
+      const pNum = eN + 1;
+      this.logger.log(`Проверяем точку: ${p1} [${pNum}]`, 'color:green');
 
 
-      let foundPoint = this.calculatePoint(p1, this.q, this.logAddingPoints);
+      let foundPoint = this.calculatePoint(p1, this.q, showLogs);
       // const isZero: boolean = this.checkIfZero(p1, this.q, this.logAddingPoints);
       const isZero: boolean = foundPoint.is0;
 
       if (!!isZero) {
-        this.logger.log(`Быстрая проверка показала что точка ${eN}P равна нулю (${isZero}). Продолжаем.`, 'color:cyan');
+        this.logger.log(`Быстрая проверка показала что точка ${pNum}P равна нулю (${isZero}). Продолжаем.`, 'color:cyan');
       } else {
-        this.logger.log(`Быстрая проверка показала что точка ${eN}P не равна нулю (${isZero}). Пропускаем.`);
+        this.logger.log(`Быстрая проверка показала что точка ${pNum}P не равна нулю (${isZero}). Пропускаем.`);
         continue;
       }
 
@@ -492,7 +499,7 @@ export class Gost extends DigitalSignature {
 
       if (!this.calculateAllPoints) {
         this.logger.log(``);
-        this.logger.log(`Точка найдена: ${p1} [${eN}]`, 'color:blue');
+        this.logger.log(`Точка найдена: ${p1} [${pNum}]`, 'color:blue');
         return;
       }
 
@@ -505,7 +512,7 @@ export class Gost extends DigitalSignature {
         // this.logger.clearLogs();
         this.logger.log(`OP = ${OP}, q=${this.q}`);
 
-        const pNext = this.addPoints(p1, pPrev, OP, this.logAddingPoints);
+        const pNext = this.addPoints(p1, pPrev, OP, showLogs);
         // 
         // ================ DEBUG POINT ================
         // const pNext = this.addPoints(p1, pPrev, OP, true);
@@ -515,7 +522,7 @@ export class Gost extends DigitalSignature {
         pPrev = pNext;
 
         if (OP > this.q) {
-          this.logger.log(`Порядок точки ${p1}[${eN}] больше q (${this.q}). Не подходит. Переходим к следующей точке.`, 'color:red');
+          this.logger.log(`Порядок точки ${p1}[${pNum}] больше q (${this.q}). Не подходит. Переходим к следующей точке.`, 'color:red');
           break;
         }
 
@@ -525,7 +532,7 @@ export class Gost extends DigitalSignature {
           if (OP === this.q) {
             foundPoint = p1;
             this.logger.log(``);
-            this.logger.log(`Точка найдена: ${p1} [${eN}]`, 'color:blue');
+            this.logger.log(`Точка найдена: ${p1} [${pNum}]`, 'color:blue');
           }
 
           break;
@@ -562,8 +569,18 @@ export class Gost extends DigitalSignature {
    */
   simpleHashFunction(blocks: number[] = this.inputBlocks) {
     const l = this.l;
-    const sum = blocks.reduce((a, c) => a + c, 0);
+    this.logger.log(`Вычисляем хеш, l=${l} `);
+    const sum = blocks.reduce((a, c) => {
+      this.logger.log(`Блок ${c}`);
+      const ret = a + c;
+      return ret;
+    }, 0);
+    this.logger.log(`Сумма ${sum}`);
+
     const sumMod = moduloPositive(sum, 2 ** l);
+
+    this.logger.log(`${sum} mod 2${sup('l')} = ${sum} mod 2${sup(l)} = ${sumMod}`);
+
     return [sumMod, sum];
   }
 
@@ -578,6 +595,10 @@ export class Gost extends DigitalSignature {
     // this.logger.log(`l - битовая длина значения q `);
     this.logger.log(`l - Двоичный логарифм q с окриглением вниз`);
 
+    this.logger.log(`\n`);
+    const log2 = Math.floor(Math.log2(this.q));
+    this.logger.log(`⌊log₂q⌋ = ⌊log₂${this.q}⌋ = ${log2}`);
+
     /**
      * Hash function
      * @param blocks 
@@ -591,12 +612,25 @@ export class Gost extends DigitalSignature {
       this.logger.log(`\n`);
 
       const log2 = Math.floor(Math.log2(this.q));
-      this.logger.log(`⌊log₂p⌋ = ⌊log₂${this.q}⌋ = ${log2}`);
+      this.logger.log(`⌊log₂q⌋ = ⌊log₂${this.q}⌋ = ${log2}`);
 
       const l = log2;
 
-      const sum = blocks.reduce((a, c) => a + c, 0);
+
+
+      this.logger.log(`Вычисляем хеш, l=${l} `);
+
+      const sum = blocks.reduce((a, c) => {
+        this.logger.log(`Блок ${c}`);
+        const ret = a + c;
+        return ret;
+      }, 0);
+      this.logger.log(`Сумма ${sum}`);
+
       const hash = moduloPositive(sum, 2 ** l);
+
+      this.logger.log(`${sum} mod 2${sup('l')} = ${sum} mod 2${sup(l)} = ${hash}`);
+
 
       this.logger.log(`hash = ${hash}`);
       this.logger.log(`\n`);
@@ -614,13 +648,13 @@ export class Gost extends DigitalSignature {
   /**
    * Ключ подписи - целое число d
    */
-  defineD() {
+  defineD(d?: number) {
 
     this.logger.log(`7. [Ключ подписи - целое число d]`, 'color:yellow');
     // https://----------------.io/n8EhjAf7HfhUtjBx3hj7yA
     // 54:30
     // this.d = 3;
-    this.d = getRandomNumber(101, 599);
+    this.d = d ?? getRandomNumber(101, 599);
 
     this.logger.log(`d = ${this.d}`);
     this.logger.log(` `);
@@ -631,15 +665,24 @@ export class Gost extends DigitalSignature {
   /**
    * Ключ проверки подписи - точка эллиптической кривой Q=dP
    */
-  defineQ() {
+  defineQ(showLogs?: boolean) {
 
+    showLogs ??= this.logAddingPoints;
     this.logger.log(`8. [Ключ проверки подписи - точка эллиптической кривой Q=dP]`, 'color:yellow');
     //
-    //this.Q = this.d * this.p;
+    // const PN = this.d;
 
-    this.Q = this.E[3];
+    let Q: Point;
 
-    //this.logger.log(` ${this.E[3]} `);
+    Q = this.calculatePoint(this.E[0], this.d, showLogs);
+    // Q = this.calculatePoint(this.E[0], this.d, true);
+
+    this.Q = Q;
+    // this.Q = this.E[PN + 1];
+
+    // this.Q = this.E[3];
+
+    //this.logger.log(` ${this.E[3]} `); 
     this.logger.log(`Q = dP = ${this.d}P = ${this.Q}`);
     this.logger.log(` `);
 
@@ -661,7 +704,7 @@ export class Gost extends DigitalSignature {
     const pN = pointNumber ?? 2;
 
     if (showLogs) this.logger.log(`\n⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤ `);
-    if (showLogs) this.logger.log(`Складываем точки ${p1.toString()} и ${p2.toString()}.`);
+    if (showLogs) this.logger.log(`Складываем точки ${p1.name} ${p1.toString()} и ${p2.name} ${p2.toString()}.`);
 
     let p: Point;
 
@@ -678,7 +721,7 @@ export class Gost extends DigitalSignature {
       }
     }
 
-    if (showLogs) this.logger.log(`Точка, получившаяся при сложении: ${pN}P = ${p.toString()}`);
+    if (showLogs) this.logger.log(`Точка, получившаяся при сложении: ${p.name || pN + 'P'} = ${p.toString()}`);
     if (showLogs) this.logger.log(`⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤⏤\n`);
 
     let scalar: number = undefined;
@@ -1176,7 +1219,7 @@ export class Gost extends DigitalSignature {
   /**
    * Sign the message
    */
-  sign(message?: string): string {
+  sign(message?: string, k?: number): string {
     // reset previous signature verification
     this.signatureVerified = null;
 
@@ -1197,7 +1240,7 @@ export class Gost extends DigitalSignature {
         throw new Error(`r loop in sign function`);
       }
       // 
-      this.setK();
+      this.setK(k);
       // step 4
       const r = this.calcR();
       if (r === 0) {
@@ -1283,15 +1326,25 @@ export class Gost extends DigitalSignature {
    * Шаг 3
    *
    */
-  setK() {
+  setK(k?: number, showLogs?: boolean) {
+
+    showLogs ??= this.logAddingPoints;
     this.logger.log(`Шаг 3. Сгенерировать случайное целое число k, удовлетворяющее неравенству 0 < k < q`, 'color:yellow');
     // this.logger.log(`Раскомментировать`, 'color:red');
-    const k = getRandomNumber(1, this.q - 1);
+    k ??= getRandomNumber(1, this.q - 1);
     this.k = k;
 
     // calculate this point beforehand
-    const p1 = this.P.get(1);
-    const pointK = this.calculatePoint(p1, k, true);
+
+    const p1 = this.E[0];
+    //
+    //const p1 = this.P.get(1);
+    //
+    //const pointK = this.calculatePoint(p1, k, true);
+    //
+    // 
+    const pointK = this.calculatePoint(p1, k, showLogs);
+    // const pointK = this.calculatePoint(p1, k, showLogs);
     this.P.set(k, pointK);
 
     // this.k = 3;
@@ -1301,16 +1354,25 @@ export class Gost extends DigitalSignature {
   /**
    * Шаг 4 r
    */
-  calcR() {
+  calcR(showLogs?: boolean) {
+    showLogs ??= this.logAddingPoints;
 
     this.logger.log(`Шаг 4. Вычислить точку эллиптической кривой C = kP и определить r = xC (mod q). Если r = 0, то вернуться к шагу 3.`, `color:yellow`);
-    const C = this.P.get(this.k);
+    // const C = this.P.get(this.k);
+    // let C = this.E[this.k - 1];
+    // if (!C) {
+    //   C = this.calculatePoint(this.E[0], this.k, showLogs);
+    // } else if (showLogs) {
+    //   this.calculatePoint(this.E[0], this.k, showLogs);
+    // }
+    const C = this.calculatePoint(this.E[0], this.k, true);
 
     if (!C) {
       this.logger.error(`Точки ${this.k}P нет в списке расчитанных точек.`);
     }
+    this.logger.log(`00000000 ${this.E[0]}`);
 
-    this.logger.log(`C = kP = ${this.k}P = ${C}`);
+    this.logger.log(`C = kP = ${this.k}P = ${C} ${C.name}`);
 
     const r = moduloPositive(C.x, this.q);
     this.logger.log(`r = x${sub('C')} (mod q) = ${C.x} mod ${this.q} = ${r}`);
@@ -1536,7 +1598,7 @@ export class Gost extends DigitalSignature {
     const rv = -this.vR * this.v;
     const rvMod = moduloPositive(rv, this.q);
 
-    this.logger.log(`Z${sub(2)} = - r × v (mod q) = ${this.vR} × ${this.v} mod ${this.q} = ${rv} mod ${this.q} = ${rvMod}`);
+    this.logger.log(`Z${sub(2)} = - r × v (mod q) = -${this.vR} × ${this.v} mod ${this.q} = ${rv} mod ${this.q} = ${rvMod}`);
 
     const Z1 = vSqMod;
     const Z2 = rvMod;
@@ -1550,7 +1612,9 @@ export class Gost extends DigitalSignature {
   /**
    * Step 6
    */
-  step6() {
+  step6(showLogs?: boolean) {
+
+    showLogs ??= this.logAddingPoints;
     this.logger.log(`Шаг 6. Вычислить точку эллиптической кривой С = z${sub(1)} Р + z${sub(1)} Q и определить R=хC (mod q).`, 'color:yellow');
 
     this.logger.log(`Точка Q: ${this.Q}, ${this.d}P`);
@@ -1561,12 +1625,19 @@ export class Gost extends DigitalSignature {
     const P = Z1 + Z2 * this.d;
     const Pmod = moduloPositive(P, this.q);
 
-    const C = this.P.get(Pmod);
+    // let C = this.E[Pmod - 1];
+    // if (!C) {
+    //   C = this.calculatePoint(this.E[0], Pmod, showLogs);
+    // } else if (showLogs) {
+    //   this.calculatePoint(this.E[0], Pmod, showLogs);
+    // }
+    const C = this.calculatePoint(this.E[0], Pmod, showLogs);
 
-    this.logger.log(`C = Z${sub(1)}P + Z${sub(2)}Q = ${Z1}P + ${Z2} × ${this.d}P = ${P}P = ${Pmod}P = ${C}`);
+    this.logger.log(`Q = ${this.d}P`);
+    this.logger.log(`C = Z${sub(1)}P + Z${sub(2)}Q = ${Z1}P + (${Z2} × ${this.d})P = (${P} mod ${this.q})P = ${Pmod}P = ${C}`);
     this.logger.log(`C = ${C}`);
 
-    this.C = C;
+    // this.C = C;
 
     const R = moduloPositive(C.x, this.q);
     this.R = R;
@@ -1584,6 +1655,12 @@ export class Gost extends DigitalSignature {
     this.logger.log(`Шаг 7. Если выполнено равенство R = r, то подпись принимается, в противном случае, подпись неверна`, 'color:yellow');
     this.logger.log(`Использованные параметры: p=${this.p}, m=${this.m}, a=${this.a}, b=${this.b}, q=${this.q}`, 'color:magenta');
     // this.logger.log(` ${this.E.length} ${this.E.length * 2} `, 'color:magenta');
+
+    if (this.r === this.R) {
+      this.logger.log(`r = R. Подпись верна`);
+    } else {
+      this.logger.log(`r ≠ R. Подпись неверна`);
+    }
 
     if (this.vR !== this.R) {
       throw new Error(`Подпись неверна`);
