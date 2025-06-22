@@ -80,9 +80,10 @@ https://www.w3schools.com/charsets/ref_utf_technical.asp
 
 
 
-  superscript_chars = "⁰¹²³⁴⁵⁶⁷⁸⁹"
+  superscript_chars = "⁰¹²³⁴⁵⁶⁷⁸⁹" ˒
   subscript_chars = "₀₁₂₃₄₅₆₇₈₉"
 
 
 https://rupertshepherd.info/resource_pages/superscript-letters-in-unicode
 https://en.wikipedia.org/wiki/Unicode_subscripts_and_superscripts
+

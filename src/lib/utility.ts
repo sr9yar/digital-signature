@@ -481,7 +481,24 @@ export function primeFactors(n: number): number[] {
   return factors.sort((a, b) => a - b);
 }
 
-
+/**
+ * Get a map for prime factors 
+ * with their respective count
+ * @param n 
+ * @returns Map<primeNumber, count>
+ */
+export function getPrimesMap(n: number): Map<number, number> {
+  const factors: Map<number, number> = new Map();
+  let divisor: number = 2;
+  while (n >= 2) {
+    while (n % divisor === 0) {
+      factors.set(divisor, (factors.get(divisor) || 0) + 1);
+      n /= divisor;
+    }
+    divisor++;
+  }
+  return factors;
+}
 
 /**
  * Get all factors
@@ -490,19 +507,6 @@ export function primeFactors(n: number): number[] {
  * @returns 
  */
 export function getAllFactors(n: number) {
-
-  function getPrimesMap(n: number): Map<number, number> {
-    const factors: Map<number, number> = new Map();
-    let divisor: number = 2;
-    while (n >= 2) {
-      while (n % divisor === 0) {
-        factors.set(divisor, (factors.get(divisor) || 0) + 1);
-        n /= divisor;
-      }
-      divisor++;
-    }
-    return factors;
-  }
 
   const primeFactors: Map<number, number> = getPrimesMap(n);
 
