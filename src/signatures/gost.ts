@@ -616,8 +616,6 @@ export class Gost extends DigitalSignature {
 
       const l = log2;
 
-
-
       this.logger.log(`Вычисляем хеш, l=${l} `);
 
       const sum = blocks.reduce((a, c) => {

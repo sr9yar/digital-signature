@@ -36,7 +36,7 @@ https://www.compart.com/en/unicode/block/U+2070
 ±
 ≠
 
-×
+ × × × × ×
 
 ⁽⁾
 
